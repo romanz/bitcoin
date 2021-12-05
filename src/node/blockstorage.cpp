@@ -364,6 +364,24 @@ bool WriteUndoDataForBlock(const CBlockUndo& blockundo, BlockValidationState& st
     return true;
 }
 
+bool ReadTxFromDisk(CTransactionRef& tx, const FlatFilePos& pos, const Consensus::Params& consensusParams)
+{
+    // Open history file to read
+    CAutoFile filein(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION);
+    if (filein.IsNull()) {
+        return error("ReadBlockFromDisk: OpenBlockFile failed for %s", pos.ToString());
+    }
+
+    // Read transaction from offset
+    try {
+        filein >> tx;
+    } catch (const std::exception& e) {
+        return error("%s: Deserialize or I/O error - %s at %s", __func__, e.what(), pos.ToString());
+    }
+
+    return true;
+}
+
 bool ReadBlockFromDisk(CBlock& block, const FlatFilePos& pos, const Consensus::Params& consensusParams)
 {
     block.SetNull();

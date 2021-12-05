@@ -121,7 +121,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
     return TransactionError::OK;
 }
 
-CTransactionRef GetTransaction(const CBlockIndex* const block_index, const CTxMemPool* const mempool, const uint256& hash, const Consensus::Params& consensusParams, uint256& hashBlock)
+CTransactionRef GetTransaction(const CBlockIndex* const block_index, const CTxMemPool* const mempool, const uint256& hash, const Consensus::Params& consensusParams, uint256& hashBlock, size_t offset)
 {
     if (mempool && !block_index) {
         CTransactionRef ptx = mempool->get(hash);
@@ -142,6 +142,19 @@ CTransactionRef GetTransaction(const CBlockIndex* const block_index, const CTxMe
     }
     if (block_index) {
         CBlock block;
+        LOG_TIME_MICROS_WITH_CATEGORY(strprintf("Loading tx %s from %s", hash.ToString(), block_index->GetBlockPos().ToString()), BCLog::UTIL);
+        if (offset > 0) {
+            FlatFilePos tx_pos{WITH_LOCK(cs_main, return block_index->GetBlockPos())};
+            tx_pos.nPos += offset;
+
+            CTransactionRef tx;
+            if (ReadTxFromDisk(tx, tx_pos, consensusParams)) {
+                if (tx->GetHash() == hash) {
+                    hashBlock = block_index->GetBlockHash();
+                    return tx;
+                }
+            }
+        }
         if (ReadBlockFromDisk(block, block_index, consensusParams)) {
             for (const auto& tx : block.vtx) {
                 if (tx->GetHash() == hash) {

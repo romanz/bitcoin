@@ -124,6 +124,7 @@ static RPCHelpMan getrawtransaction()
                     {"txid", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The transaction id"},
                     {"verbose", RPCArg::Type::BOOL, RPCArg::Default{false}, "If false, return a string, otherwise return a json object"},
                     {"blockhash", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED_NAMED_ARG, "The block in which to look for the transaction"},
+                    {"offset", RPCArg::Type::NUM, RPCArg::Optional::OMITTED_NAMED_ARG, "Transaction offset within the serialized block"},
                 },
                 {
                     RPCResult{"if verbose is not set or set to false",
@@ -225,7 +226,11 @@ static RPCHelpMan getrawtransaction()
     }
 
     uint256 hash_block;
-    const CTransactionRef tx = GetTransaction(blockindex, node.mempool.get(), hash, Params().GetConsensus(), hash_block);
+    size_t offset = 0;
+    if (!request.params[3].isNull()) {
+        offset = request.params[3].get_int();
+    }
+    const CTransactionRef tx = GetTransaction(blockindex, node.mempool.get(), hash, Params().GetConsensus(), hash_block, offset);
     if (!tx) {
         std::string errmsg;
         if (blockindex) {
