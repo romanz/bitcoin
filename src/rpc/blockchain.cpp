@@ -2626,6 +2626,59 @@ UniValue CreateUTXOSnapshot(NodeContext& node, CChainState& chainstate, CAutoFil
     return result;
 }
 
+static RPCHelpMan getblocklocations()
+{
+    return RPCHelpMan{"getblocklocations",
+                "\nEXPERIMENTAL warning: this call may be removed or changed in future releases.\n"
+                "\nReturns a JSON for the file system location of 'blockhash' block data.\n",
+                {
+                     {"blockhashes", RPCArg::Type::ARR, RPCArg::Optional::NO, "The blockhashes to lookup",
+                        {
+                            {"blockhash", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "A block hash"},
+                        },
+                        },
+               },
+                {
+                    RPCResult{
+                        RPCResult::Type::ARR, "", "",
+                        {
+                            {RPCResult::Type::NUM, "file", "blk*.dat file index"},
+                            {RPCResult::Type::NUM, "data", "block data file offset"},
+                        }
+                    },
+                },
+                RPCExamples{
+                    HelpExampleCli("getblocklocation", "[\"00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09\"]")
+                },
+                [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue {
+
+    if (fPruneMode) {
+        throw JSONRPCError(RPC_MISC_ERROR, "Block locations are not available in prune mode");
+    }
+
+    ChainstateManager& chainman = EnsureAnyChainman(request.context);
+
+    UniValue result(UniValue::VARR);
+
+    UniValue blockhashes = request.params[0].get_array();
+    for (size_t i = 0; i < blockhashes.size(); ++i) {
+        uint256 blockhash = ParseHashV(blockhashes[i], "blockhash");
+        const CBlockIndex* pblockindex = chainman.m_blockman.LookupBlockIndex(blockhash);
+        if (!pblockindex) {
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Block not found");
+        }
+
+        UniValue location(UniValue::VOBJ);
+        location.pushKV("file", (uint64_t)pblockindex->nFile);
+        location.pushKV("data", (uint64_t)pblockindex->nDataPos);
+        result.push_back(location);
+    }
+
+    return result;
+},
+    };
+}
+
 void RegisterBlockchainRPCCommands(CRPCTable &t)
 {
 // clang-format off
@@ -2665,6 +2718,7 @@ static const CRPCCommand commands[] =
     { "hidden",              &waitforblockheight,                },
     { "hidden",              &syncwithvalidationinterfacequeue,  },
     { "hidden",              &dumptxoutset,                      },
+    { "hidden",              &getblocklocations,                 },
 };
 // clang-format on
     for (const auto& c : commands) {

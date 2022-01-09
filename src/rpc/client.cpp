@@ -126,6 +126,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "converttopsbt", 2, "iswitness"},
     { "gettxout", 1, "n" },
     { "gettxout", 2, "include_mempool" },
+    { "getblocklocations", 0, "blockhashes" },
     { "gettxoutproof", 0, "txids" },
     { "gettxoutsetinfo", 1, "hash_or_height" },
     { "gettxoutsetinfo", 2, "use_index"},
