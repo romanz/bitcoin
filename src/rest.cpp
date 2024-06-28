@@ -294,6 +294,35 @@ static bool rest_block(const std::any& context,
     if (!ParseHashStr(hashStr, hash))
         return RESTERR(req, HTTP_BAD_REQUEST, "Invalid hash: " + hashStr);
 
+    std::optional<node::ByteRange> range;
+    try {
+        const std::optional<std::string> offset_param = req->GetQueryParameter("offset");
+        const std::optional<std::string> length_param = req->GetQueryParameter("length");
+        if (offset_param || length_param) {
+            const std::optional<size_t> offset{ToIntegral<size_t>(offset_param.value_or(""))};
+            const std::optional<size_t> length{ToIntegral<size_t>(length_param.value_or(""))};
+            if (!offset || !length) {
+                return RESTERR(req, HTTP_BAD_REQUEST, "Invalid byte range for block " + hashStr + ":"
+                    + (offset_param ? " offset=" + *offset_param : std::string{})
+                    + (length_param ? " length=" + *length_param : std::string{})
+                );
+            }
+            switch (rf)
+            {
+            case RESTResponseFormat::BINARY:
+            case RESTResponseFormat::HEX:
+                range = node::ByteRange{.offset = *offset, .length = *length};
+                break;
+
+            default:
+                return RESTERR(req, HTTP_BAD_REQUEST, "Byte range read is not supported for specified format");
+            }
+
+        }
+    } catch (const std::runtime_error& e) {
+        return RESTERR(req, HTTP_BAD_REQUEST, e.what());
+    }
+
     FlatFilePos pos{};
     const CBlockIndex* pblockindex = nullptr;
     const CBlockIndex* tip = nullptr;
@@ -313,20 +342,20 @@ static bool rest_block(const std::any& context,
         pos = pblockindex->GetBlockPos();
     }
 
-    std::vector<uint8_t> block_data{};
-    if (!chainman.m_blockman.ReadRawBlockFromDisk(block_data, pos)) {
+    std::vector<uint8_t> data{};
+    if (!chainman.m_blockman.ReadRawBlockFromDisk(data, pos, range)) {
         return RESTERR(req, HTTP_NOT_FOUND, hashStr + " not found");
     }
 
     switch (rf) {
     case RESTResponseFormat::BINARY: {
         req->WriteHeader("Content-Type", "application/octet-stream");
-        req->WriteReply(HTTP_OK, std::as_bytes(std::span{block_data}));
+        req->WriteReply(HTTP_OK, std::as_bytes(std::span{data}));
         return true;
     }
 
     case RESTResponseFormat::HEX: {
-        const std::string strHex{HexStr(block_data) + "\n"};
+        const std::string strHex{HexStr(data) + "\n"};
         req->WriteHeader("Content-Type", "text/plain");
         req->WriteReply(HTTP_OK, strHex);
         return true;
@@ -334,7 +363,7 @@ static bool rest_block(const std::any& context,
 
     case RESTResponseFormat::JSON: {
         CBlock block{};
-        DataStream block_stream{block_data};
+        DataStream block_stream{data};
         block_stream >> TX_WITH_WITNESS(block);
         UniValue objBlock = blockToJSON(chainman.m_blockman, block, *tip, *pblockindex, tx_verbosity);
         std::string strJSON = objBlock.write() + "\n";

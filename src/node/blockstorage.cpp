@@ -1097,7 +1097,7 @@ bool BlockManager::ReadBlockFromDisk(CBlock& block, const CBlockIndex& index) co
     return true;
 }
 
-bool BlockManager::ReadRawBlockFromDisk(std::vector<uint8_t>& block, const FlatFilePos& pos) const
+bool BlockManager::ReadRawBlockFromDisk(std::vector<uint8_t>& result, const FlatFilePos& pos, std::optional<ByteRange> range_opt) const
 {
     FlatFilePos hpos = pos;
     // If nPos is less than 8 the pos is null and we don't have the block data
@@ -1132,8 +1132,16 @@ bool BlockManager::ReadRawBlockFromDisk(std::vector<uint8_t>& block, const FlatF
             return false;
         }
 
-        block.resize(blk_size); // Zeroing of memory is intentional here
-        filein.read(MakeWritableByteSpan(block));
+        ByteRange range = range_opt.value_or(ByteRange{.offset = 0, .length = blk_size});
+        if ((range.offset > blk_size) || (range.length > blk_size) || (range.offset + range.length > blk_size)) {
+            LogError("%s: Byte range offset=%u length=%u is invalid for block of size %u\n", __func__, range.offset, range.length, blk_size);
+            return false;
+        }
+        if (range.offset > 0) {
+            filein.seek(range.offset, SEEK_CUR);
+        }
+        result.resize(range.length); // Zeroing of memory is intentional here
+        filein.read(MakeWritableByteSpan(result));
     } catch (const std::exception& e) {
         LogError("%s: Read from block file failed: %s for %s\n", __func__, e.what(), pos.ToString());
         return false;

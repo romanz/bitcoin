@@ -123,6 +123,10 @@ struct BlockfileCursor {
 
 std::ostream& operator<<(std::ostream& os, const BlockfileCursor& cursor);
 
+struct ByteRange {
+    size_t offset;
+    size_t length;
+};
 
 /**
  * Maintains a tree of blocks (stored in `m_block_index`) which is consulted
@@ -400,7 +404,7 @@ public:
     /** Functions for disk access for blocks */
     bool ReadBlockFromDisk(CBlock& block, const FlatFilePos& pos) const;
     bool ReadBlockFromDisk(CBlock& block, const CBlockIndex& index) const;
-    bool ReadRawBlockFromDisk(std::vector<uint8_t>& block, const FlatFilePos& pos) const;
+    bool ReadRawBlockFromDisk(std::vector<uint8_t>& block, const FlatFilePos& pos, std::optional<ByteRange> range = std::nullopt) const;
 
     bool UndoReadFromDisk(CBlockUndo& blockundo, const CBlockIndex& index) const;
 

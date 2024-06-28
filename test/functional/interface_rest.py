@@ -233,6 +233,42 @@ class RESTTest (BitcoinTestFramework):
         assert_greater_than(int(response.getheader('content-length')), BLOCK_HEADER_SIZE)
         response_bytes = response.read()
 
+        response = self.test_rest_request(f"/block/{bb_hash}", req_type=ReqType.BIN, ret_type=RetType.OBJ,
+                                          query_params={'offset': 0, 'length': len(response_bytes)})
+        assert_equal(int(response.getheader('content-length')), len(response_bytes))
+        assert response_bytes == response.read()
+
+        response = self.test_rest_request(f"/block/{bb_hash}", req_type=ReqType.BIN, ret_type=RetType.OBJ,
+                                          query_params={'offset': 0, 'length': BLOCK_HEADER_SIZE})
+        assert_equal(int(response.getheader('content-length')), BLOCK_HEADER_SIZE)
+        assert response_bytes[:BLOCK_HEADER_SIZE] == response.read()
+
+        response = self.test_rest_request(f"/block/{bb_hash}", req_type=ReqType.BIN, ret_type=RetType.OBJ,
+                                          query_params={'offset': 10, 'length': len(response_bytes)-20})
+        assert_equal(int(response.getheader('content-length')), len(response_bytes)-20)
+        assert response_bytes[10:-10] == response.read()
+
+        response = self.test_rest_request(f"/block/{bb_hash}", req_type=ReqType.BIN, ret_type=RetType.OBJ,
+                                          query_params={'offset': 0, 'length': 0})
+        assert_equal(int(response.getheader('content-length')), 0)
+        assert b"" == response.read()
+
+        self.test_rest_request(f"/block/{bb_hash}", status=400, ret_type=RetType.OBJ,
+                               query_params={'offset': 0})
+        self.test_rest_request(f"/block/{bb_hash}", status=400, ret_type=RetType.OBJ,
+                               query_params={'length': 0})
+        self.test_rest_request(f"/block/{bb_hash}", status=400, ret_type=RetType.OBJ,
+                               query_params={'offset': 'x', 'length': 10})
+        self.test_rest_request(f"/block/{bb_hash}", status=400, ret_type=RetType.OBJ,
+                               query_params={'offset': 10, 'length': 'x'})
+        self.test_rest_request(f"/block/{bb_hash}", status=400, ret_type=RetType.OBJ,
+                               query_params={'offset': 100000, 'length': 10})
+        self.test_rest_request(f"/block/{bb_hash}", status=400, ret_type=RetType.OBJ,
+                               query_params={'offset': 0, 'length': 100000})
+        self.test_rest_request(f"/block/{bb_hash}", status=400, ret_type=RetType.OBJ,
+                               query_params={'offset': len(response_bytes)-10, 'length': 20})
+
+
         # Compare with block header
         response_header = self.test_rest_request(f"/headers/{bb_hash}", req_type=ReqType.BIN, ret_type=RetType.OBJ, query_params={"count": 1})
         assert_equal(int(response_header.getheader('content-length')), BLOCK_HEADER_SIZE)
@@ -241,9 +277,21 @@ class RESTTest (BitcoinTestFramework):
 
         # Check block hex format
         response_hex = self.test_rest_request(f"/block/{bb_hash}", req_type=ReqType.HEX, ret_type=RetType.OBJ)
-        assert_greater_than(int(response_hex.getheader('content-length')), BLOCK_HEADER_SIZE*2)
+        assert_greater_than(int(response_hex.getheader('content-length')), len(response_bytes)*2)
         response_hex_bytes = response_hex.read().strip(b'\n')
         assert_equal(response_bytes.hex().encode(), response_hex_bytes)
+
+        response_hex = self.test_rest_request(f"/block/{bb_hash}", req_type=ReqType.HEX, ret_type=RetType.OBJ,
+                                              query_params={'offset': 0, 'length': len(response_bytes)})
+        assert_greater_than(int(response_hex.getheader('content-length')), len(response_bytes)*2)
+        response_hex_bytes = response_hex.read().strip(b'\n')
+        assert_equal(response_bytes.hex().encode(), response_hex_bytes)
+
+        response_hex = self.test_rest_request(f"/block/{bb_hash}", req_type=ReqType.HEX, ret_type=RetType.OBJ,
+                                              query_params={'offset': 0, 'length': BLOCK_HEADER_SIZE})
+        assert_greater_than(int(response_hex.getheader('content-length')), BLOCK_HEADER_SIZE*2)
+        response_hex_bytes = response_hex.read().strip(b'\n')
+        assert_equal(response_header_bytes.hex().encode(), response_hex_bytes)
 
         # Compare with hex block header
         response_header_hex = self.test_rest_request(f"/headers/{bb_hash}", req_type=ReqType.HEX, ret_type=RetType.OBJ, query_params={"count": 1})
