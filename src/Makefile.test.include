@@ -121,6 +121,7 @@ BITCOIN_TESTS =\
   test/net_tests.cpp \
   test/netbase_tests.cpp \
   test/node_warnings_tests.cpp \
+  test/offsetsindex_tests.cpp \
   test/orphanage_tests.cpp \
   test/peerman_tests.cpp \
   test/pmt_tests.cpp \
