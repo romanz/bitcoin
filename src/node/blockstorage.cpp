@@ -1080,6 +1080,119 @@ bool BlockManager::ReadRawBlock(std::vector<std::byte>& block, const FlatFilePos
     return true;
 }
 
+static const uint32_t HEADER_SIZE = ::GetSerializeSize(CBlockHeader{});
+
+template <typename T>
+struct SkipVector {
+    size_t count;
+    T elem; // use for skipping element-related data
+
+    void clear()
+    {
+        count = 0;
+    }
+
+    size_t size() const
+    {
+        return count;
+    }
+
+    T& operator[](size_t)
+    {
+        return elem;
+    }
+
+    template <typename Stream>
+    void Unserialize(Stream& s)
+    {
+        count = ReadCompactSize(s);
+        for (size_t i = 0; i < count; ++i) {
+            s >> elem;
+        }
+    }
+};
+
+struct SkipBytes {
+    template <typename Stream>
+    void Unserialize(Stream& s)
+    {
+        size_t size = ReadCompactSize(s);
+        s.ignore(size);
+    }
+};
+
+struct SkipScriptWitness {
+    SkipVector<SkipBytes> stack;
+};
+
+struct SkipTxIn {
+    SkipScriptWitness scriptWitness; // accessed by UnserializeTransaction
+
+    template <typename Stream>
+    void Unserialize(Stream& s)
+    {
+        COutPoint prevout;
+        SkipBytes scriptSig;
+        uint32_t nSequence;
+
+        s >> prevout >> scriptSig >> nSequence;
+    }
+};
+
+struct SkipTxOut {
+    template <typename Stream>
+    void Unserialize(Stream& s)
+    {
+        CAmount nValue;
+        SkipBytes scriptPubKey;
+
+        s >> nValue >> scriptPubKey;
+    }
+};
+
+struct SkipTransaction {
+    SkipVector<SkipTxIn> vin;
+    SkipVector<SkipTxOut> vout;
+    uint32_t version;
+    uint32_t nLockTime;
+
+    template <typename Stream>
+    void Unserialize(Stream& s)
+    {
+        UnserializeTransaction(*this, s, TX_WITH_WITNESS);
+    }
+
+    bool HasWitness() const { return true; }
+};
+
+bool BlockManager::ReadRawTxFromBlock(std::vector<std::byte>& tx_bytes, const FlatFilePos& block_pos, size_t tx_index) const
+{
+    std::vector<std::byte> block_data{};
+    if (!ReadRawBlock(block_data, block_pos)) {
+        return false;
+    }
+    SpanReader reader{block_data};
+
+    reader.ignore(HEADER_SIZE);
+    size_t tx_count = ReadCompactSize(reader);
+    if (tx_index >= tx_count) {
+        return false;
+    }
+
+    SkipTransaction skip_tx;
+    for (size_t i = 0; i < tx_index; ++i) {
+        reader >> skip_tx;
+    }
+    size_t tx_start = block_data.size() - reader.size();
+    reader >> skip_tx;
+    size_t tx_end = block_data.size() - reader.size();
+
+    std::span<const std::byte> tx_span{&block_data[tx_start], &block_data[tx_end]};
+    tx_bytes.resize(tx_span.size());
+    tx_bytes.assign(tx_span.begin(), tx_span.end());
+    return true;
+}
+
 FlatFilePos BlockManager::WriteBlock(const CBlock& block, int nHeight)
 {
     const unsigned int block_size{static_cast<unsigned int>(GetSerializeSize(TX_WITH_WITNESS(block)))};
